@@ -1,15 +1,19 @@
-def call(String imageName, String kubeConfigId) {
+def call(String imageName, String kubeConfigId, String awsAccountId, String region) {
     echo "Deploying to Kubernetes"
     
-    // Using the "Secret file" added in Jenkins Credentials
     withCredentials([file(credentialsId: kubeConfigId, variable: 'KUBECONFIG')]) {
-        
-        // Replace the IMAGE_URL placeholder in the YAML file with the actual ECR image address
+        sh """
+            export KUBECONFIG=${KUBECONFIG}
+            TOKEN=\$(aws ecr get-login-password --region ${region})
+            kubectl delete secret ecr-creds --ignore-not-found
+            kubectl create secret docker-registry ecr-creds \
+                --docker-server=${awsAccountId}.dkr.ecr.${region}.amazonaws.com \
+                --docker-username=AWS \
+                --docker-password=\$TOKEN
+        """
+
         sh "sed -i 's|IMAGE_URL|${imageName}|g' k8s-deploy.yaml"
         
-        // Execute the deployment
-        sh "kubectl --kubeconfig=\$KUBECONFIG apply -f k8s-deploy.yaml"
+        sh "kubectl --kubeconfig=\$KUBECONFIG apply -f k8s-deploy.yaml --insecure-skip-tls-verify"
     }
-    
-    echo "Deployed successfully!"
 }
